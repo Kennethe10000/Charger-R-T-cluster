@@ -6,8 +6,12 @@ Custom digital instrument cluster for a 2014 Dodge Charger R/T. Raspberry Pi, CA
 ### Stage 1: Gauge UI (fake data)
 ![Stage 1 gauge UI](docs/screenshots/stage1-gauge-ui.png)
 
-## Architecture (planned)
+### Stage 1b: More gauges (fake data)
+Added coolant, oil pressure, battery, fuel, oil life, and tire pressure.
 
+![Stage 1b more gauges](docs/screenshots/stage1b-more-gauges.png)
+
+## Architecture (planned)
 
 ```mermaid
 flowchart LR
