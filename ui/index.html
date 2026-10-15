@@ -6,14 +6,17 @@ canvas{width:100vw;height:100vh;display:block}
 </style></head><body><canvas id="c" width="1920" height="720"></canvas>
 <script>
 const c=document.getElementById('c'),g=c.getContext('2d');
-const data={rpm:0,speed:0,coolant:195};
+const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,tires:[32,32,32,32]};
 
 // fake data: replace this block with a WebSocket later
 let t=0;
 setInterval(()=>{t+=0.03;
  data.rpm=3000+2500*Math.sin(t);
  data.speed=60+50*Math.sin(t*0.7);
- data.coolant=195+5*Math.sin(t*0.2);},33);
+ data.coolant=195+5*Math.sin(t*0.2);
+ data.oil=40+20*Math.sin(t*0.5);
+ data.volts=14.0+0.5*Math.sin(t*0.3);
+ data.tires=[32,32.5,31.5+Math.sin(t*0.1),32];},33);
 
 function gauge(x,y,r,val,max,label){
  const a0=Math.PI*0.75,a1=Math.PI*2.25;
@@ -25,12 +28,29 @@ function gauge(x,y,r,val,max,label){
  g.font='bold 110px monospace';g.fillText(Math.round(val),x,y+30);
  g.font='36px monospace';g.fillStyle='#888';g.fillText(label,x,y+85);
 }
+function stat(x,y,label,val,unit,bad){
+ g.textAlign='center';
+ g.fillStyle='#888';g.font='32px monospace';g.fillText(label,x,y);
+ g.fillStyle=bad?'#f33':'#fff';g.font='bold 60px monospace';
+ g.fillText(val+' '+unit,x,y+60);
+}
+function tire(x,y,label,val){
+ g.textAlign='center';
+ g.fillStyle='#888';g.font='28px monospace';g.fillText(label,x,y);
+ g.fillStyle=val<28?'#f33':'#0cf';g.font='bold 38px monospace';
+ g.fillText(val.toFixed(1),x,y+44);
+}
 function draw(){
  g.clearRect(0,0,1920,720);
- gauge(450,360,260,data.speed,160,'MPH');
- gauge(1470,360,260,data.rpm,7000,'RPM');
- g.fillStyle='#fff';g.font='48px monospace';g.textAlign='center';
- g.fillText('COOLANT '+Math.round(data.coolant)+'°F',960,360);
+ gauge(400,360,250,data.speed,160,'MPH');
+ gauge(1520,360,250,data.rpm,7000,'RPM');
+ stat(960,110,'COOLANT',Math.round(data.coolant),'F',data.coolant>230);
+ stat(960,260,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20);
+ stat(960,410,'BATTERY',data.volts.toFixed(1),'V',data.volts<12);
+ g.fillStyle='#888';g.font='28px monospace';g.textAlign='center';
+ g.fillText('TIRE PSI',960,530);
+ tire(780,575,'FL',data.tires[0]);tire(900,575,'FR',data.tires[1]);
+ tire(1020,575,'RL',data.tires[2]);tire(1140,575,'RR',data.tires[3]);
  requestAnimationFrame(draw);
 }
 draw();
