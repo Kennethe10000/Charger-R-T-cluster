@@ -6,7 +6,7 @@ canvas{width:100vw;height:100vh;display:block}
 </style></head><body><canvas id="c" width="1920" height="720"></canvas>
 <script>
 const c=document.getElementById('c'),g=c.getContext('2d');
-const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,tires:[32,32,32,32]};
+const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,oilLife:80,tires:[32,32,32,32]};
 
 // fake data: replace this block with a WebSocket later
 let t=0;
@@ -16,6 +16,7 @@ setInterval(()=>{t+=0.03;
  data.coolant=195+5*Math.sin(t*0.2);
  data.oil=40+20*Math.sin(t*0.5);
  data.volts=14.0+0.5*Math.sin(t*0.3);
+ data.fuel=60+30*Math.sin(t*0.05);
  data.tires=[32,32.5,31.5+Math.sin(t*0.1),32];},33);
 
 function gauge(x,y,r,val,max,label){
@@ -44,9 +45,11 @@ function draw(){
  g.clearRect(0,0,1920,720);
  gauge(400,360,250,data.speed,160,'MPH');
  gauge(1520,360,250,data.rpm,7000,'RPM');
- stat(960,110,'COOLANT',Math.round(data.coolant),'F',data.coolant>230);
- stat(960,260,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20);
- stat(960,410,'BATTERY',data.volts.toFixed(1),'V',data.volts<12);
+ stat(820,110,'COOLANT',Math.round(data.coolant),'F',data.coolant>230);
+ stat(1100,110,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20);
+ stat(820,260,'BATTERY',data.volts.toFixed(1),'V',data.volts<12);
+ stat(1100,260,'FUEL',Math.round(data.fuel),'%',data.fuel<15);
+ stat(960,410,'OIL LIFE',Math.round(data.oilLife),'%',data.oilLife<15);
  g.fillStyle='#888';g.font='28px monospace';g.textAlign='center';
  g.fillText('TIRE PSI',960,530);
  tire(780,575,'FL',data.tires[0]);tire(900,575,'FR',data.tires[1]);
