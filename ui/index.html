@@ -2,11 +2,17 @@
 <html><head><meta charset="utf-8"><title>Cluster</title>
 <style>
 html,body{margin:0;background:#000;height:100%;overflow:hidden}
-canvas{width:100vw;height:100vh;display:block}
+body{display:flex;align-items:center;justify-content:center}
+canvas{display:block}
 </style></head><body><canvas id="c" width="1920" height="720"></canvas>
 <script>
+const DEV=true; // set to false for the final product: turns the layout editor off
 const c=document.getElementById('c'),g=c.getContext('2d');
-const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,oilLife:80,tires:[32,32,32,32]};
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/720);
+ c.style.width=(1920*s)+'px';c.style.height=(720*s)+'px';}
+addEventListener('resize',fit);fit();
+
+const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,oilLife:80,tires:[32,32.5,31.5,32]};
 
 // fake data: replace this block with a WebSocket later
 let t=0;
@@ -16,18 +22,70 @@ setInterval(()=>{t+=0.03;
  data.coolant=195+5*Math.sin(t*0.2);
  data.oil=40+20*Math.sin(t*0.5);
  data.volts=14.0+0.5*Math.sin(t*0.3);
- data.fuel=60+30*Math.sin(t*0.05);
- data.tires=[32,32.5,31.5+Math.sin(t*0.1),32];},33);
+ data.fuel=60+30*Math.sin(t*0.05);},33);
 
-function gauge(x,y,r,val,max,label){
+// ---------- settings ----------
+const PALETTE=[
+ {name:'Green',hex:'#00ff88'},{name:'Cyan',hex:'#00ccff'},{name:'Orange',hex:'#ffaa00'},
+ {name:'Purple',hex:'#b46bff'},{name:'Pink',hex:'#ff4fa3'},{name:'White',hex:'#ffffff'}
+];
+const settings={units:'MPH',color:0,coolant:true,oil:true,battery:true,fuel:true,oilLife:true,curSpeed:true,tires:true,extraLights:true,lightTest:false,hornFx:false};
+try{Object.assign(settings,JSON.parse(localStorage.getItem('cluster-settings')||'{}'));}catch(e){}
+settings.lightTest=false;
+function save(){try{localStorage.setItem('cluster-settings',JSON.stringify(settings));}catch(e){}}
+const theme=()=>PALETTE[settings.color].hex;
+const tStart=performance.now();
+
+// ---------- warning lights ----------
+// flags = lights with no data rule yet. The CAN decoder will set these later.
+const flags={cel:false,abs:false,srs:false,brake:false,tpms:false,esc:false,escOff:false,belt:false,door:false,turnL:false,turnR:false,beam:false,cruise:false,park:false,tune:false,rec:false,gps:false};
+const RED='#ff3b30',AMB='#ffaa00',GRN='#2ee66b',BLU='#3d9bff';
+const blink=()=>Math.floor(performance.now()/400)%2===0;
+const LAMPS=[
+ {id:'cel',label:'CEL',color:AMB,on:()=>flags.cel},
+ {id:'oil',label:'OIL',color:RED,on:()=>data.oil<20},
+ {id:'bat',label:'BAT',color:RED,on:()=>data.volts<12},
+ {id:'temp',label:'TEMP',color:RED,on:()=>data.coolant>230},
+ {id:'fuel',label:'FUEL',color:AMB,on:()=>data.fuel<15},
+ {id:'abs',label:'ABS',color:AMB,on:()=>flags.abs},
+ {id:'srs',label:'SRS',color:RED,on:()=>flags.srs},
+ {id:'brake',label:'BRAKE',color:RED,on:()=>flags.brake},
+ {id:'tpms',label:'TPMS',color:AMB,on:()=>flags.tpms||data.tires.some(p=>p<28)},
+ {id:'esc',label:'ESC',color:AMB,on:()=>flags.esc},
+ {id:'escOff',label:'E-OFF',color:AMB,on:()=>flags.escOff},
+ {id:'belt',label:'BELT',color:RED,on:()=>flags.belt},
+ {id:'door',label:'DOOR',color:AMB,on:()=>flags.door},
+ {id:'turnL',label:'\u25C4',color:GRN,on:()=>flags.turnL&&blink(),pos:[148,92]},
+ {id:'turnR',label:'\u25BA',color:GRN,on:()=>flags.turnR&&blink(),pos:[1805,106]},
+ {id:'beam',label:'BEAM',color:BLU,on:()=>flags.beam},
+ {id:'cruise',label:'CRUISE',color:GRN,on:()=>flags.cruise},
+ {id:'park',label:'PARK',color:GRN,on:()=>flags.park},
+ {id:'tune',label:'TUNE',color:'theme',extra:true,on:()=>flags.tune},
+ {id:'horn',label:'HORN',color:'theme',extra:true,on:()=>settings.hornFx},
+ {id:'rec',label:'REC',color:RED,extra:true,on:()=>flags.rec},
+ {id:'gps',label:'GPS',color:'theme',extra:true,on:()=>flags.gps}
+];
+let bulb=false;
+function light(x,y,label,on,color){
+ g.fillStyle=on?color:'#161616';
+ g.beginPath();g.roundRect(x-36,y-18,72,36,8);g.fill();
+ g.strokeStyle=on?color:'#2a2a2a';g.lineWidth=2;g.stroke();
+ g.fillStyle=on?'#000':'#444';g.font='bold 18px monospace';g.textAlign='center';
+ g.fillText(label,x,y+6);
+}
+
+// ---------- drawing helpers ----------
+function gauge(x,y,r,val,max,label,o={}){
  const a0=Math.PI*0.75,a1=Math.PI*2.25;
  const a=a0+(a1-a0)*Math.min(Math.max(val/max,0),1);
- g.lineWidth=28;g.lineCap='round';
+ g.lineWidth=o.lw||28;g.lineCap='round';
  g.strokeStyle='#222';g.beginPath();g.arc(x,y,r,a0,a1);g.stroke();
- g.strokeStyle='#0cf';g.beginPath();g.arc(x,y,r,a0,a);g.stroke();
+ g.strokeStyle=o.color||theme();g.beginPath();g.arc(x,y,r,a0,a);g.stroke();
  g.fillStyle='#fff';g.textAlign='center';
- g.font='bold 110px monospace';g.fillText(Math.round(val),x,y+30);
- g.font='36px monospace';g.fillStyle='#888';g.fillText(label,x,y+85);
+ g.font='bold '+(o.nf||110)+'px monospace';
+ g.fillText(o.text!==undefined?o.text:Math.round(val),x,y+(o.dy||30));
+ g.font=(o.lf||36)+'px monospace';g.fillStyle='#888';
+ g.fillText(label,x,y+(o.ly||85));
 }
 function stat(x,y,label,val,unit,bad){
  g.textAlign='center';
@@ -35,25 +93,195 @@ function stat(x,y,label,val,unit,bad){
  g.fillStyle=bad?'#f33':'#fff';g.font='bold 60px monospace';
  g.fillText(val+' '+unit,x,y+60);
 }
-function tire(x,y,label,val){
- g.textAlign='center';
- g.fillStyle='#888';g.font='28px monospace';g.fillText(label,x,y);
- g.fillStyle=val<28?'#f33':'#0cf';g.font='bold 38px monospace';
- g.fillText(val.toFixed(1),x,y+44);
+function tireNum(x,y,val,align){
+ g.textAlign=align;
+ g.fillStyle=val<28?'#ff3b30':theme();
+ g.font='bold 34px monospace';
+ g.fillText(val.toFixed(1),x,y);
 }
+function drawCar(cx,cy){
+ const th=theme();
+ [[-62,-72],[62,-72],[-62,72],[62,72]].forEach((p,i)=>{
+  g.fillStyle=data.tires[i]<28?'#ff3b30':th;
+  g.beginPath();g.roundRect(cx+p[0]-9,cy+p[1]-24,18,48,5);g.fill();
+ });
+ g.fillStyle='#1c1c1c';g.strokeStyle=th;g.lineWidth=3;
+ g.beginPath();g.roundRect(cx-48,cy-112,96,224,28);g.fill();g.stroke();
+ g.fillStyle='#2b3a40';
+ g.beginPath();g.roundRect(cx-36,cy-52,72,34,8);g.fill();
+ g.beginPath();g.roundRect(cx-34,cy+38,68,26,8);g.fill();
+ g.fillStyle='#232323';
+ g.beginPath();g.roundRect(cx-34,cy-14,68,48,6);g.fill();
+ g.fillStyle='#fff';g.fillRect(cx-40,cy-108,22,6);g.fillRect(cx+18,cy-108,22,6);
+ g.fillStyle='#ff3b30';g.fillRect(cx-40,cy+102,22,6);g.fillRect(cx+18,cy+102,22,6);
+}
+
+// ---------- element registry (everything on screen that can be moved) ----------
+const E=[];
+const add=(id,bx,by,w,h,x,y,draw,show)=>E.push({id,bx,by,w,h,def:{x,y},draw,show});
+const spd=()=>settings.units==='MPH'?data.speed:data.speed*1.609;
+add('rpm',-265,-265,530,530,355,348,(x,y)=>gauge(x,y,250,data.rpm,7000,'RPM'));
+add('speed',-265,-265,530,530,1577,364,(x,y)=>settings.units==='MPH'
+ ?gauge(x,y,250,data.speed,160,'MPH'):gauge(x,y,250,data.speed*1.609,260,'KPH'));
+add('fuel',-100,-100,200,200,355,600,(x,y)=>gauge(x,y,90,data.fuel,100,'FUEL',
+ {lw:14,nf:40,lf:22,dy:10,ly:44,color:data.fuel<15?RED:theme(),text:Math.round(data.fuel)+'%'}),()=>settings.fuel);
+add('curSpeed',-150,-36,300,110,943,140,(x,y)=>stat(x,y,'CURRENT SPEED',Math.round(spd()),settings.units,false),()=>settings.curSpeed);
+add('coolant',-140,-36,280,110,682,140,(x,y)=>stat(x,y,'COOLANT',Math.round(data.coolant),'F',data.coolant>230),()=>settings.coolant);
+add('oilPressure',-140,-36,280,110,1200,138,(x,y)=>stat(x,y,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20),()=>settings.oil);
+add('battery',-140,-36,280,110,1204,584,(x,y)=>stat(x,y,'BATTERY',data.volts.toFixed(1),'V',data.volts<12),()=>settings.battery);
+add('oilLife',-140,-36,280,110,709,580,(x,y)=>stat(x,y,'OIL LIFE',Math.round(data.oilLife),'%',data.oilLife<15),()=>settings.oilLife);
+add('car',-75,-115,150,230,943,434,(x,y)=>drawCar(x,y),()=>settings.tires);
+add('tireFL',-110,-30,110,40,867,373,(x,y)=>tireNum(x,y,data.tires[0],'right'),()=>settings.tires);
+add('tireFR',0,-30,110,40,1016,374,(x,y)=>tireNum(x,y,data.tires[1],'left'),()=>settings.tires);
+add('tireRL',-110,-30,110,40,864,518,(x,y)=>tireNum(x,y,data.tires[2],'right'),()=>settings.tires);
+add('tireRR',0,-30,110,40,1022,512,(x,y)=>tireNum(x,y,data.tires[3],'left'),()=>settings.tires);
+LAMPS.forEach((L,i)=>{
+ const p=L.pos||[120+i*80,30];
+ add('lamp_'+L.id,-36,-18,72,36,p[0],p[1],
+  (x,y)=>light(x,y,L.label,bulb||L.on(),L.color==='theme'?theme():L.color),
+  ()=>!L.extra||settings.extraLights);
+});
+
+// ---------- saved layout ----------
+let layout={};
+if(DEV){try{layout=JSON.parse(localStorage.getItem('cluster-layout')||'{}');}catch(e){}}
+E.forEach(e=>{if(!layout[e.id])layout[e.id]={x:e.def.x,y:e.def.y};});
+function saveLayout(){if(DEV)try{localStorage.setItem('cluster-layout',JSON.stringify(layout));}catch(e){}}
+
+// ---------- menu ----------
+const menu={open:false,index:0};
+const onoff=k=>settings[k]?'ON':'OFF';
+const flip=k=>()=>{settings[k]=!settings[k];};
+const items=[
+ {label:'Speed units',get:()=>settings.units,act:()=>{settings.units=settings.units==='MPH'?'KPH':'MPH';}},
+ {label:'Color',get:()=>PALETTE[settings.color].name,act:()=>{settings.color=(settings.color+1)%PALETTE.length;}},
+ {label:'Coolant',get:()=>onoff('coolant'),act:flip('coolant')},
+ {label:'Oil pressure',get:()=>onoff('oil'),act:flip('oil')},
+ {label:'Battery',get:()=>onoff('battery'),act:flip('battery')},
+ {label:'Fuel',get:()=>onoff('fuel'),act:flip('fuel')},
+ {label:'Oil life',get:()=>onoff('oilLife'),act:flip('oilLife')},
+ {label:'Current speed',get:()=>onoff('curSpeed'),act:flip('curSpeed')},
+ {label:'Tire pressure',get:()=>onoff('tires'),act:flip('tires')},
+ {label:'Extra lights',get:()=>onoff('extraLights'),act:flip('extraLights')},
+ {label:'Light test',get:()=>onoff('lightTest'),act:flip('lightTest')},
+ {label:'Horn FX',get:()=>onoff('hornFx'),act:flip('hornFx')},
+ {label:'Close',get:()=>'',act:()=>{menu.open=false;}}
+];
+
+// Buttons: keyboard now, steering wheel (CAN) later
+function button(name){
+ if(!menu.open){ if(name==='ok') menu.open=true; return; }
+ if(name==='up') menu.index=(menu.index+items.length-1)%items.length;
+ if(name==='down') menu.index=(menu.index+1)%items.length;
+ if(name==='ok'){ items[menu.index].act(); save(); }
+ if(name==='back') menu.open=false;
+}
+const keys={ArrowUp:'up',ArrowDown:'down',Enter:'ok',Escape:'back'};
+
+function drawMenu(){
+ g.fillStyle='rgba(0,0,0,0.92)';g.fillRect(560,30,800,670);
+ g.strokeStyle=theme();g.lineWidth=4;g.strokeRect(560,30,800,670);
+ g.textAlign='center';g.fillStyle='#fff';g.font='bold 40px monospace';
+ g.fillText('SETTINGS',960,82);
+ items.forEach((it,i)=>{
+  const y=130+i*42;
+  if(i===menu.index){g.fillStyle=theme();g.fillRect(590,y-31,740,42);}
+  g.fillStyle=i===menu.index?'#000':'#fff';
+  g.font='30px monospace';
+  g.textAlign='left';g.fillText(it.label,620,y);
+  g.textAlign='right';g.fillText(it.get(),1300,y);
+ });
+}
+
+// ---------- layout editor (dev only) ----------
+let edit=false,sel=null,drag=null,toast='',toastUntil=0;
+function pt(ev){const r=c.getBoundingClientRect();
+ return{x:(ev.clientX-r.left)*c.width/r.width,y:(ev.clientY-r.top)*c.height/r.height};}
+function hit(p){
+ for(let i=E.length-1;i>=0;i--){
+  const e=E[i],q=layout[e.id];
+  if(p.x>=q.x+e.bx&&p.x<=q.x+e.bx+e.w&&p.y>=q.y+e.by&&p.y<=q.y+e.by+e.h) return e;
+ }
+ return null;
+}
+c.addEventListener('pointerdown',ev=>{
+ if(!DEV||!edit||menu.open)return;
+ const p=pt(ev);sel=hit(p);
+ if(sel){const q=layout[sel.id];drag={dx:p.x-q.x,dy:p.y-q.y};c.setPointerCapture(ev.pointerId);}
+});
+c.addEventListener('pointermove',ev=>{
+ if(!DEV||!edit||!drag||!sel)return;
+ const p=pt(ev);
+ layout[sel.id]={x:Math.round(p.x-drag.dx),y:Math.round(p.y-drag.dy)};
+});
+c.addEventListener('pointerup',()=>{if(drag){drag=null;saveLayout();}});
+
+function exportLayout(){
+ const txt=JSON.stringify(layout,null,1);
+ console.log(txt);
+ navigator.clipboard.writeText(txt)
+  .then(()=>{toast='Layout copied to clipboard';})
+  .catch(()=>{toast='Copy failed, see console (F12)';});
+ toastUntil=performance.now()+2500;
+}
+
+window.addEventListener('keydown',ev=>{
+ const k=ev.key.toLowerCase();
+ if(DEV){
+  if(k==='d'){edit=!edit;sel=null;return;}
+  if(edit&&!menu.open){
+   if(k==='e'){exportLayout();return;}
+   if(k==='r'){
+    if(confirm('Reset all positions?')){try{localStorage.removeItem('cluster-layout');}catch(e){} location.reload();}
+    return;
+   }
+   if(sel&&ev.key.startsWith('Arrow')){
+    ev.preventDefault();
+    const s=ev.shiftKey?10:1,q=layout[sel.id];
+    if(ev.key==='ArrowLeft')q.x-=s;
+    if(ev.key==='ArrowRight')q.x+=s;
+    if(ev.key==='ArrowUp')q.y-=s;
+    if(ev.key==='ArrowDown')q.y+=s;
+    saveLayout();
+    return;
+   }
+  }
+ }
+ if(keys[ev.key]){ev.preventDefault();button(keys[ev.key]);}
+});
+
+// ---------- main draw ----------
 function draw(){
  g.clearRect(0,0,1920,720);
- gauge(400,360,250,data.speed,160,'MPH');
- gauge(1520,360,250,data.rpm,7000,'RPM');
- stat(820,110,'COOLANT',Math.round(data.coolant),'F',data.coolant>230);
- stat(1100,110,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20);
- stat(820,260,'BATTERY',data.volts.toFixed(1),'V',data.volts<12);
- stat(1100,260,'FUEL',Math.round(data.fuel),'%',data.fuel<15);
- stat(960,410,'OIL LIFE',Math.round(data.oilLife),'%',data.oilLife<15);
- g.fillStyle='#888';g.font='28px monospace';g.textAlign='center';
- g.fillText('TIRE PSI',960,530);
- tire(780,575,'FL',data.tires[0]);tire(900,575,'FR',data.tires[1]);
- tire(1020,575,'RL',data.tires[2]);tire(1140,575,'RR',data.tires[3]);
+ // all lights glow for 2 seconds at startup, like a real cluster
+ bulb=settings.lightTest||edit||(performance.now()-tStart<2000);
+
+ E.forEach(e=>{
+  const p=layout[e.id];
+  const vis=e.show?e.show():true;
+  if(!vis&&!edit)return;
+  g.globalAlpha=vis?1:0.3;
+  e.draw(p.x,p.y);
+  g.globalAlpha=1;
+  if(edit){
+   g.strokeStyle=e===sel?'#ffd400':'rgba(0,255,136,0.35)';
+   g.lineWidth=e===sel?3:1;
+   g.strokeRect(p.x+e.bx,p.y+e.by,e.w,e.h);
+  }
+ });
+
+ if(edit){
+  g.fillStyle='rgba(0,0,0,0.75)';g.fillRect(0,688,1920,32);
+  g.fillStyle='#ffd400';g.font='20px monospace';g.textAlign='left';
+  let msg='EDIT MODE | drag = move | arrows = nudge (Shift = 10) | E = copy layout | R = reset | D = exit';
+  if(sel)msg+='   >>  '+sel.id+'  x:'+layout[sel.id].x+'  y:'+layout[sel.id].y;
+  g.fillText(msg,12,710);
+ }
+ if(performance.now()<toastUntil){
+  g.fillStyle='#ffd400';g.font='bold 30px monospace';g.textAlign='center';
+  g.fillText(toast,960,670);
+ }
+ if(menu.open) drawMenu();
  requestAnimationFrame(draw);
 }
 draw();
