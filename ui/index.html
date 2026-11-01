@@ -17,19 +17,19 @@ const data={rpm:0,speed:0,coolant:195,oil:40,volts:14.1,fuel:60,oilLife:80,tires
 // fake data: replace this block with a WebSocket later
 let t=0;
 setInterval(()=>{t+=0.03;
- data.rpm=3000+2500*Math.sin(t);
+ data.rpm=3500+3300*Math.sin(t);
  data.speed=60+50*Math.sin(t*0.7);
- data.coolant=195+5*Math.sin(t*0.2);
- data.oil=40+20*Math.sin(t*0.5);
+ data.coolant=215+25*Math.sin(t*0.2);
+ data.oil=25+22*Math.sin(t*0.5);
  data.volts=14.0+0.5*Math.sin(t*0.3);
- data.fuel=60+30*Math.sin(t*0.05);},33);
+ data.fuel=50+48*Math.sin(t*0.15);},33);
 
 // ---------- settings ----------
 const PALETTE=[
  {name:'Green',hex:'#00ff88'},{name:'Cyan',hex:'#00ccff'},{name:'Orange',hex:'#ffaa00'},
  {name:'Purple',hex:'#b46bff'},{name:'Pink',hex:'#ff4fa3'},{name:'White',hex:'#ffffff'}
 ];
-const settings={units:'MPH',color:0,coolant:true,oil:true,battery:true,fuel:true,oilLife:true,curSpeed:true,tires:true,extraLights:true,lightTest:false,hornFx:false};
+const settings={units:'MPH',color:0,coolant:true,oil:true,battery:true,fuel:true,oilLife:true,curSpeed:true,tires:true,extraLights:true,lightTest:false,hornFx:false,icons:true};
 try{Object.assign(settings,JSON.parse(localStorage.getItem('cluster-settings')||'{}'));}catch(e){}
 settings.lightTest=false;
 function save(){try{localStorage.setItem('cluster-settings',JSON.stringify(settings));}catch(e){}}
@@ -38,41 +38,70 @@ const tStart=performance.now();
 
 // ---------- warning lights ----------
 // flags = lights with no data rule yet. The CAN decoder will set these later.
-const flags={cel:false,abs:false,srs:false,brake:false,tpms:false,esc:false,escOff:false,belt:false,door:false,turnL:false,turnR:false,beam:false,cruise:false,park:false,tune:false,rec:false,gps:false};
+const flags={cel:false,abs:false,srs:false,brake:false,tpms:false,esc:false,escOff:false,belt:false,doors:[false,false,false,false],turnL:false,turnR:false,beam:false,cruise:false,park:false,tune:false,rec:false,gps:false};
 const RED='#ff3b30',AMB='#ffaa00',GRN='#2ee66b',BLU='#3d9bff';
 const blink=()=>Math.floor(performance.now()/400)%2===0;
 const LAMPS=[
  {id:'cel',label:'CEL',color:AMB,on:()=>flags.cel},
- {id:'oil',label:'OIL',color:RED,on:()=>data.oil<20},
- {id:'bat',label:'BAT',color:RED,on:()=>data.volts<12},
- {id:'temp',label:'TEMP',color:RED,on:()=>data.coolant>230},
- {id:'fuel',label:'FUEL',color:AMB,on:()=>data.fuel<15},
  {id:'abs',label:'ABS',color:AMB,on:()=>flags.abs},
  {id:'srs',label:'SRS',color:RED,on:()=>flags.srs},
- {id:'brake',label:'BRAKE',color:RED,on:()=>flags.brake},
- {id:'tpms',label:'TPMS',color:AMB,on:()=>flags.tpms||data.tires.some(p=>p<28)},
+ {id:'brake',label:'BRAKE',icon:'❗',color:RED,on:()=>flags.brake},
  {id:'esc',label:'ESC',color:AMB,on:()=>flags.esc},
  {id:'escOff',label:'E-OFF',color:AMB,on:()=>flags.escOff},
  {id:'belt',label:'BELT',color:RED,on:()=>flags.belt},
- {id:'door',label:'DOOR',color:AMB,on:()=>flags.door},
  {id:'turnL',label:'\u25C4',color:GRN,on:()=>flags.turnL&&blink(),pos:[148,92]},
  {id:'turnR',label:'\u25BA',color:GRN,on:()=>flags.turnR&&blink(),pos:[1805,106]},
- {id:'beam',label:'BEAM',color:BLU,on:()=>flags.beam},
  {id:'cruise',label:'CRUISE',color:GRN,on:()=>flags.cruise},
- {id:'park',label:'PARK',color:GRN,on:()=>flags.park},
- {id:'tune',label:'TUNE',color:'theme',extra:true,on:()=>flags.tune},
- {id:'horn',label:'HORN',color:'theme',extra:true,on:()=>settings.hornFx},
- {id:'rec',label:'REC',color:RED,extra:true,on:()=>flags.rec},
- {id:'gps',label:'GPS',color:'theme',extra:true,on:()=>flags.gps}
+ {id:'park',label:'PARK',icon:'🅿️',color:GRN,on:()=>flags.park},
+ {id:'tune',label:'TUNE',icon:'🎛️',color:'theme',extra:true,on:()=>flags.tune},
+ {id:'horn',label:'HORN',icon:'📯',color:'theme',extra:true,on:()=>settings.hornFx},
+ {id:'rec',label:'REC',icon:'🔴',color:RED,extra:true,on:()=>flags.rec},
+ {id:'gps',label:'GPS',icon:'🛰️',color:'theme',extra:true,on:()=>flags.gps}
 ];
 let bulb=false;
-function light(x,y,label,on,color){
- g.fillStyle=on?color:'#161616';
- g.beginPath();g.roundRect(x-36,y-18,72,36,8);g.fill();
+function light(x,y,label,on,color,icon){
+ g.beginPath();g.roundRect(x-36,y-18,72,36,8);
+ if(icon){
+  g.fillStyle='#161616';g.fill();
+  g.strokeStyle=on?color:'#2a2a2a';g.lineWidth=on?3:2;g.stroke();
+  const a0=g.globalAlpha;
+  g.globalAlpha=a0*(on?1:0.25);
+  g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';
+  g.font='24px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+  g.fillText(icon,x,y+2);
+  g.textBaseline='alphabetic';g.globalAlpha=a0;
+  return;
+ }
+ g.fillStyle=on?color:'#161616';g.fill();
  g.strokeStyle=on?color:'#2a2a2a';g.lineWidth=2;g.stroke();
  g.fillStyle=on?'#000':'#444';g.font='bold 18px monospace';g.textAlign='center';
  g.fillText(label,x,y+6);
 }
+
+// ---------- danger fade: normal color -> red -> purple -> black ----------
+// Limits are placeholders, tune them to your engine.
+const LIM={rpmHigh:6000,rpmFar:6800,coolHigh:220,coolFar:250,oilLow:20,oilFar:5,
+ voltLow:12,voltFar:10.5,voltHigh:15,voltHighFar:16.5,fuelLow:15,fuelFar:3,
+ tireLow:28,tireFar:20,oilLifeLow:15,oilLifeFar:0};
+ // Tire colors. Placeholder numbers: check your door jamb sticker for the real target.
+const TIRE={low:30,lowFar:26,high:36,highFar:50};
+function tireColor(v){
+ if(v>TIRE.high) return mixC(theme(),'#ff3b30',Math.min(1,(v-TIRE.high)/(TIRE.highFar-TIRE.high)));
+ if(v<TIRE.low) return mixC(theme(),'#000000',Math.min(1,(TIRE.low-v)/(TIRE.low-TIRE.lowFar)));
+ return theme();
+}
+function rgb(h){h=h.replace('#','');return[0,2,4].map(i=>parseInt(h.substr(i,2),16));}
+function mixC(a,b,k){const A=rgb(a),B=rgb(b);
+ return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*k)).join(',')+')';}
+function dangerColor(base,s){
+ s=Math.max(0,Math.min(1,s));
+ if(s<0.4) return mixC(base,'#ff3b30',s/0.4);
+ if(s<0.75) return mixC('#ff3b30','#8a2be2',(s-0.4)/0.35);
+ return mixC('#8a2be2','#000000',(s-0.75)/0.25);
+}
+function over(v,limit,far){return v>limit?0.2+0.8*Math.min(1,(v-limit)/(far-limit)):0;}
+function under(v,limit,far){return v<limit?0.2+0.8*Math.min(1,(limit-v)/(limit-far)):0;}
+function textFade(base,s){return dangerColor(base,Math.min(s,0.74));}
 
 // ---------- drawing helpers ----------
 function gauge(x,y,r,val,max,label,o={}){
@@ -87,58 +116,102 @@ function gauge(x,y,r,val,max,label,o={}){
  g.font=(o.lf||36)+'px monospace';g.fillStyle='#888';
  g.fillText(label,x,y+(o.ly||85));
 }
-function stat(x,y,label,val,unit,bad){
+function stat(x,y,label,val,unit,s){
  g.textAlign='center';
  g.fillStyle='#888';g.font='32px monospace';g.fillText(label,x,y);
- g.fillStyle=bad?'#f33':'#fff';g.font='bold 60px monospace';
- g.fillText(val+' '+unit,x,y+60);
+ g.fillStyle=textFade('#ffffff',s||0);g.font='bold 60px monospace';
+ g.fillText(unit?val+' '+unit:val,x,y+60);
 }
 function tireNum(x,y,val,align){
  g.textAlign=align;
- g.fillStyle=val<28?'#ff3b30':theme();
+ g.fillStyle=tireColor(val);
  g.font='bold 34px monospace';
- g.fillText(val.toFixed(1),x,y);
+ g.fillText(Math.round(val),x,y);
 }
 function drawCar(cx,cy){
  const th=theme();
+ // wheels
  [[-62,-72],[62,-72],[-62,72],[62,72]].forEach((p,i)=>{
-  g.fillStyle=data.tires[i]<28?'#ff3b30':th;
+  g.fillStyle=tireColor(data.tires[i]);
   g.beginPath();g.roundRect(cx+p[0]-9,cy+p[1]-24,18,48,5);g.fill();
  });
- g.fillStyle='#1c1c1c';g.strokeStyle=th;g.lineWidth=3;
- g.beginPath();g.roundRect(cx-48,cy-112,96,224,28);g.fill();g.stroke();
+ // body
+ g.fillStyle='#1c1c1c';g.strokeStyle=th;g.lineWidth=3;g.lineJoin='round';
+ g.beginPath();
+ g.moveTo(cx-32,cy-112);g.lineTo(cx+32,cy-112);
+ g.bezierCurveTo(cx+42,cy-112,cx+47,cy-100,cx+48,cy-84);
+ g.bezierCurveTo(cx+49,cy-50,cx+46,cy-10,cx+46,cy+10);
+ g.bezierCurveTo(cx+46,cy+40,cx+49,cy+66,cx+47,cy+90);
+ g.bezierCurveTo(cx+46,cy+104,cx+40,cy+112,cx+30,cy+112);
+ g.lineTo(cx-30,cy+112);
+ g.bezierCurveTo(cx-40,cy+112,cx-46,cy+104,cx-47,cy+90);
+ g.bezierCurveTo(cx-49,cy+66,cx-46,cy+40,cx-46,cy+10);
+ g.bezierCurveTo(cx-46,cy-10,cx-49,cy-50,cx-48,cy-84);
+ g.bezierCurveTo(cx-47,cy-100,cx-42,cy-112,cx-32,cy-112);
+ g.closePath();g.fill();g.stroke();
+ // hood creases
+ g.strokeStyle='#343434';g.lineWidth=3;g.lineCap='round';
+ [-15,15].forEach(dx=>{g.beginPath();g.moveTo(cx+dx,cy-96);g.lineTo(cx+dx*0.8,cy-54);g.stroke();});
+ // windshield, rear window, roof
  g.fillStyle='#2b3a40';
- g.beginPath();g.roundRect(cx-36,cy-52,72,34,8);g.fill();
- g.beginPath();g.roundRect(cx-34,cy+38,68,26,8);g.fill();
- g.fillStyle='#232323';
- g.beginPath();g.roundRect(cx-34,cy-14,68,48,6);g.fill();
- g.fillStyle='#fff';g.fillRect(cx-40,cy-108,22,6);g.fillRect(cx+18,cy-108,22,6);
- g.fillStyle='#ff3b30';g.fillRect(cx-40,cy+102,22,6);g.fillRect(cx+18,cy+102,22,6);
+ g.beginPath();g.moveTo(cx-30,cy-48);g.lineTo(cx+30,cy-48);g.lineTo(cx+36,cy-20);g.lineTo(cx-36,cy-20);g.closePath();g.fill();
+ g.beginPath();g.moveTo(cx-36,cy+40);g.lineTo(cx+36,cy+40);g.lineTo(cx+30,cy+68);g.lineTo(cx-30,cy+68);g.closePath();g.fill();
+ g.fillStyle='#262626';g.beginPath();g.roundRect(cx-36,cy-20,72,60,10);g.fill();
+ // mirrors
+ g.fillStyle='#1c1c1c';g.strokeStyle=th;g.lineWidth=2;
+ [-1,1].forEach(s=>{g.beginPath();g.roundRect(cx+s*52-6,cy-46,12,16,4);g.fill();g.stroke();});
+ // open doors: [side, top y, bottom y] = FL, FR, RL, RR
+ [[-1,-48,-2],[1,-48,-2],[-1,0,46],[1,0,46]].forEach((d,i)=>{
+  if(!(flags.doors[i]||settings.lightTest))return;
+  const hx=cx+d[0]*48,hy=cy+d[1],len=d[2]-d[1];
+  g.fillStyle='#000';g.fillRect(hx-4,hy,8,len);
+  g.strokeStyle=AMB;g.lineWidth=7;g.lineCap='round';
+  g.beginPath();g.moveTo(hx,hy);g.lineTo(hx+d[0]*len*0.6,hy+len*0.8);g.stroke();
+ });
+  // high beams
+ if(flags.beam||settings.lightTest){
+  [-1,1].forEach(s=>{
+   const bx=cx+s*30,by=cy-108;
+   const gr=g.createLinearGradient(0,by,0,by-100);
+   gr.addColorStop(0,'rgba(120,180,255,0.85)');
+   gr.addColorStop(1,'rgba(120,180,255,0)');
+   g.fillStyle=gr;
+   g.beginPath();
+   g.moveTo(bx-10,by);g.lineTo(bx+10,by);
+   g.lineTo(bx+s*12+28,by-100);g.lineTo(bx+s*12-28,by-100);
+   g.closePath();g.fill();
+  });
+ }
+ // headlights and the full-width taillight strip
+ g.fillStyle='#fff';
+ [-1,1].forEach(s=>{g.beginPath();g.moveTo(cx+s*40,cy-104);g.lineTo(cx+s*24,cy-110);g.lineTo(cx+s*22,cy-105);g.lineTo(cx+s*38,cy-96);g.closePath();g.fill();});
+ g.fillStyle=RED;g.beginPath();g.roundRect(cx-37,cy+100,74,6,3);g.fill();
 }
-
 // ---------- element registry (everything on screen that can be moved) ----------
 const E=[];
 const add=(id,bx,by,w,h,x,y,draw,show)=>E.push({id,bx,by,w,h,def:{x,y},draw,show});
 const spd=()=>settings.units==='MPH'?data.speed:data.speed*1.609;
-add('rpm',-265,-265,530,530,355,348,(x,y)=>gauge(x,y,250,data.rpm,7000,'RPM'));
+add('rpm',-265,-265,530,530,355,348,(x,y)=>gauge(x,y,250,data.rpm,7000,'RPM',
+ {color:dangerColor(theme(),over(data.rpm,LIM.rpmHigh,LIM.rpmFar))}));
 add('speed',-265,-265,530,530,1577,364,(x,y)=>settings.units==='MPH'
  ?gauge(x,y,250,data.speed,160,'MPH'):gauge(x,y,250,data.speed*1.609,260,'KPH'));
 add('fuel',-100,-100,200,200,355,600,(x,y)=>gauge(x,y,90,data.fuel,100,'FUEL',
- {lw:14,nf:40,lf:22,dy:10,ly:44,color:data.fuel<15?RED:theme(),text:Math.round(data.fuel)+'%'}),()=>settings.fuel);
-add('curSpeed',-150,-36,300,110,943,140,(x,y)=>stat(x,y,'CURRENT SPEED',Math.round(spd()),settings.units,false),()=>settings.curSpeed);
-add('coolant',-140,-36,280,110,682,140,(x,y)=>stat(x,y,'COOLANT',Math.round(data.coolant),'F',data.coolant>230),()=>settings.coolant);
-add('oilPressure',-140,-36,280,110,1200,138,(x,y)=>stat(x,y,'OIL PRESSURE',Math.round(data.oil),'PSI',data.oil<20),()=>settings.oil);
-add('battery',-140,-36,280,110,1204,584,(x,y)=>stat(x,y,'BATTERY',data.volts.toFixed(1),'V',data.volts<12),()=>settings.battery);
-add('oilLife',-140,-36,280,110,709,580,(x,y)=>stat(x,y,'OIL LIFE',Math.round(data.oilLife),'%',data.oilLife<15),()=>settings.oilLife);
+ {lw:14,nf:40,lf:22,dy:10,ly:44,color:dangerColor(theme(),under(data.fuel,LIM.fuelLow,LIM.fuelFar)),text:Math.round(data.fuel)+'%'}),()=>settings.fuel);
+add('curSpeed',-150,-36,300,110,943,140,(x,y)=>stat(x,y,'CURRENT SPEED',Math.round(spd()),'',0),()=>settings.curSpeed);
+add('coolant',-140,-36,280,110,682,140,(x,y)=>stat(x,y,'COOLANT',Math.round(data.coolant),'F',over(data.coolant,LIM.coolHigh,LIM.coolFar)),()=>settings.coolant);
+add('oilPressure',-140,-36,280,110,1200,138,(x,y)=>stat(x,y,'OIL PRESSURE',Math.round(data.oil),'PSI',under(data.oil,LIM.oilLow,LIM.oilFar)),()=>settings.oil);
+add('battery',-140,-36,280,110,1204,584,(x,y)=>stat(x,y,'BATTERY',data.volts.toFixed(1),'V',Math.max(under(data.volts,LIM.voltLow,LIM.voltFar),over(data.volts,LIM.voltHigh,LIM.voltHighFar))),()=>settings.battery);
+add('oilLife',-140,-36,280,110,709,580,(x,y)=>stat(x,y,'OIL LIFE',Math.round(data.oilLife),'%',under(data.oilLife,LIM.oilLifeLow,LIM.oilLifeFar)),()=>settings.oilLife);
 add('car',-75,-115,150,230,943,434,(x,y)=>drawCar(x,y),()=>settings.tires);
 add('tireFL',-110,-30,110,40,867,373,(x,y)=>tireNum(x,y,data.tires[0],'right'),()=>settings.tires);
 add('tireFR',0,-30,110,40,1016,374,(x,y)=>tireNum(x,y,data.tires[1],'left'),()=>settings.tires);
 add('tireRL',-110,-30,110,40,864,518,(x,y)=>tireNum(x,y,data.tires[2],'right'),()=>settings.tires);
 add('tireRR',0,-30,110,40,1022,512,(x,y)=>tireNum(x,y,data.tires[3],'left'),()=>settings.tires);
-LAMPS.forEach((L,i)=>{
- const p=L.pos||[120+i*80,30];
+let slot=0;
+LAMPS.forEach(L=>{
+ const p=L.pos||[480+(slot++)*80,30];
  add('lamp_'+L.id,-36,-18,72,36,p[0],p[1],
-  (x,y)=>light(x,y,L.label,bulb||L.on(),L.color==='theme'?theme():L.color),
+  (x,y)=>light(x,y,L.label,bulb||L.on(),L.color==='theme'?theme():L.color,settings.icons?L.icon:null),
   ()=>!L.extra||settings.extraLights);
 });
 
@@ -163,6 +236,7 @@ const items=[
  {label:'Current speed',get:()=>onoff('curSpeed'),act:flip('curSpeed')},
  {label:'Tire pressure',get:()=>onoff('tires'),act:flip('tires')},
  {label:'Extra lights',get:()=>onoff('extraLights'),act:flip('extraLights')},
+  {label:'Emoji icons',get:()=>onoff('icons'),act:flip('icons')},
  {label:'Light test',get:()=>onoff('lightTest'),act:flip('lightTest')},
  {label:'Horn FX',get:()=>onoff('hornFx'),act:flip('hornFx')},
  {label:'Close',get:()=>'',act:()=>{menu.open=false;}}
@@ -216,6 +290,14 @@ c.addEventListener('pointermove',ev=>{
 });
 c.addEventListener('pointerup',()=>{if(drag){drag=null;saveLayout();}});
 
+function centerLamps(){
+ const ids=LAMPS.filter(L=>!L.pos&&(!L.extra||settings.extraLights)).map(L=>'lamp_'+L.id);
+ const gap=80,startX=960-(ids.length-1)*gap/2;
+ ids.forEach((id,i)=>{layout[id]={x:Math.round(startX+i*gap),y:30};});
+ saveLayout();
+ toast='Lights centered';toastUntil=performance.now()+1500;
+}
+
 function exportLayout(){
  const txt=JSON.stringify(layout,null,1);
  console.log(txt);
@@ -235,6 +317,7 @@ window.addEventListener('keydown',ev=>{
     if(confirm('Reset all positions?')){try{localStorage.removeItem('cluster-layout');}catch(e){} location.reload();}
     return;
    }
+   if(k==='l'){centerLamps();return;}
    if(sel&&ev.key.startsWith('Arrow')){
     ev.preventDefault();
     const s=ev.shiftKey?10:1,q=layout[sel.id];
@@ -273,7 +356,7 @@ function draw(){
  if(edit){
   g.fillStyle='rgba(0,0,0,0.75)';g.fillRect(0,688,1920,32);
   g.fillStyle='#ffd400';g.font='20px monospace';g.textAlign='left';
-  let msg='EDIT MODE | drag = move | arrows = nudge (Shift = 10) | E = copy layout | R = reset | D = exit';
+   let msg='EDIT MODE | drag = move | arrows = nudge (Shift = 10) | L = center lights | E = copy layout | R = reset | D = exit';
   if(sel)msg+='   >>  '+sel.id+'  x:'+layout[sel.id].x+'  y:'+layout[sel.id].y;
   g.fillText(msg,12,710);
  }
